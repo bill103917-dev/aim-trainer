@@ -81,7 +81,7 @@
         import * as THREE from 'three';
 
         // --- 設定與連線 ---
-        const SERVER_URL = "https://你的後端網址.onrender.com"; // 部署後請修改此處
+        const SERVER_URL = "https://aim-trainer-sever.onrender.com"; // 部署後請修改此處
         let socket, scene, camera, renderer, raycaster;
         let isPaused = true, score = 0, targets = [], otherPlayers = {};
         let config = JSON.parse(localStorage.getItem('aim_pro_v2')) || { name: "", device: "pc", shootKey: "KeyE" };
