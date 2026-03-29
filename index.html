@@ -3,49 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Aim Trainer - iPad Edition</title>
+    <title>3D Aim Trainer - Pro Edition</title>
     <style>
-        /* 基礎樣式：確保全螢幕且無捲軸 */
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
             overflow: hidden; touch-action: none; background: #000;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: sans-serif;
         }
         canvas { display: block; }
-
-        /* 暫停選單 */
         #menu {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); color: white;
+            background: rgba(0,0,0,0.8); color: white;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 20; transition: opacity 0.3s;
+            z-index: 20;
         }
-
-        /* 準星 */
         #crosshair {
             position: absolute; top: 50%; left: 50%;
-            width: 12px; height: 12px; border: 2px solid #00ff00; border-radius: 50%;
+            width: 16px; height: 16px; border: 2px solid #0f0; border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none; z-index: 10;
         }
-
-        h1 { margin-bottom: 20px; letter-spacing: 2px; }
-        p { margin-bottom: 30px; color: #aaa; }
-
-        /* 開始按鈕 */
-        #startBtn { 
-            padding: 16px 48px; font-size: 1.2rem; background: #22c55e; color: white;
-            border: none; border-radius: 12px; cursor: pointer; font-weight: bold;
-            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
+        #crosshair::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            width: 2px; height: 2px; background: #0f0; transform: translate(-50%, -50%);
         }
-        #startBtn:active { transform: scale(0.95); }
+        button { 
+            padding: 15px 40px; font-size: 1.2rem; background: #22c55e; border: none; 
+            border-radius: 8px; color: white; cursor: pointer; font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
     <div id="menu">
         <h1>3D 準度練習</h1>
-        <p>滑鼠左鍵「按住並拖曳」旋轉視角<br>點擊標靶進行射擊</p>
-        <button id="startBtn">進入練習</button>
+        <p>移動滑鼠控制視角</p>
+        <p>【左鍵】或【E】射擊 / 【Esc】暫停</p>
+        <button id="startBtn">開始練習</button>
     </div>
     
     <div id="crosshair"></div>
@@ -57,137 +50,106 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. 初始化 3D 場景 ---
+        // --- 場景設定 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a0a); // 深灰色背景
-
+        scene.background = new THREE.Color(0x050505);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.rotation.order = 'YXZ'; // 重要：設定旋轉順序防止視角翻轉
+        camera.rotation.order = 'YXZ';
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 優化 Retina 顯示器效能
         document.body.appendChild(renderer.domElement);
 
-        // --- 2. 建立環境物品 ---
         // 燈光
-        const mainLight = new THREE.PointLight(0xffffff, 1.5);
-        mainLight.position.set(5, 10, 5);
-        scene.add(mainLight);
-        scene.add(new THREE.AmbientLight(0x444444));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(10, 10, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+        scene.add(new THREE.GridHelper(100, 50, 0x222222, 0x111111));
 
-        // 地板網格
-        const grid = new THREE.GridHelper(100, 50, 0x333333, 0x222222);
-        scene.add(grid);
-
-        // --- 3. 遊戲邏輯變數 ---
+        // --- 變數 ---
         let isPaused = true;
-        let isDragging = false;
         const targets = [];
         const raycaster = new THREE.Raycaster();
         const menu = document.getElementById('menu');
         const startBtn = document.getElementById('startBtn');
 
-        // --- 4. 視角與輸入控制 ---
+        // --- 核心功能：射擊 ---
+        function shoot() {
+            if (isPaused) return;
+            const center = new THREE.Vector2(0, 0); 
+            raycaster.setFromCamera(center, camera);
+            const intersects = raycaster.intersectObjects(targets);
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                scene.remove(hit);
+                targets.splice(targets.indexOf(hit), 1);
+                spawnTarget();
+            }
+        }
+
+        // --- 輸入監聽 ---
         startBtn.addEventListener('click', () => {
             isPaused = false;
             menu.style.display = 'none';
         });
 
-        // 偵測 ESC 鍵
+        // 監聽鍵盤 (E 射擊, Esc 暫停)
         window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyE') shoot();
             if (e.key === 'Escape') {
                 isPaused = true;
                 menu.style.display = 'flex';
             }
         });
 
-        // iPad 滑鼠/觸控旋轉處理
-        renderer.domElement.addEventListener('pointerdown', (e) => {
-            if (isPaused) return;
-            isDragging = true;
-            checkShoot(); // 點擊時同時判定射擊
+        // 監聽滑鼠左鍵射擊
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0) shoot(); // 0 是左鍵
         });
 
-        window.addEventListener('pointerup', () => {
-            isDragging = false;
-        });
-
-        window.addEventListener('pointermove', (e) => {
-            if (isDragging && !isPaused) {
-                // 在 iOS 上使用 movementX/Y 是最穩定的方式
-                // 如果是舊版 iOS，則需手動計算 ClientX 的差值
-                const sensitivity = 0.004;
+        // 監聽滑鼠感應移動 (不需要按住)
+        window.addEventListener('mousemove', (e) => {
+            if (!isPaused) {
+                const sensitivity = 0.003;
+                // 使用 e.movement 獲取相對移動量
                 const movementX = e.movementX || 0;
                 const movementY = e.movementY || 0;
 
                 camera.rotation.y -= movementX * sensitivity;
                 camera.rotation.x -= movementY * sensitivity;
-
-                // 限制上下看範圍（不能翻筋斗）
-                camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
+                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
             }
         });
 
-        // --- 5. 射擊判定系統 ---
-        function checkShoot() {
-            // 從螢幕中心發射射線
-            const center = new THREE.Vector2(0, 0); 
-            raycaster.setFromCamera(center, camera);
-            
-            const intersects = raycaster.intersectObjects(targets);
-            if (intersects.length > 0) {
-                const target = intersects[0].object;
-                destroyTarget(target);
-            }
-        }
-
-        function destroyTarget(obj) {
-            scene.remove(obj);
-            const index = targets.indexOf(obj);
-            if (index > -1) targets.splice(index, 1);
-            spawnTarget(); // 消失後立即生成新的
-        }
-
-        // --- 6. 標靶生成邏輯 ---
+        // --- 標靶系統 ---
         function spawnTarget() {
-            const geometry = new THREE.SphereGeometry(0.5, 32, 32);
-            const material = new THREE.MeshStandardMaterial({ 
-                color: 0xff4444, 
-                emissive: 0x220000,
-                roughness: 0.3 
-            });
-            const sphere = new THREE.Mesh(geometry, material);
-
-            // 隨機擺放在玩家前方 180 度範圍內
-            const angle = (Math.random() - 0.5) * Math.PI; // -90 to 90 度
-            const distance = 10 + Math.random() * 10;
+            const geometry = new THREE.IcosahedronGeometry(0.5, 0); // 更有稜角的目標
+            const material = new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0x440000 });
+            const mesh = new THREE.Mesh(geometry, material);
             
-            sphere.position.x = Math.sin(angle) * distance;
-            sphere.position.y = 1 + Math.random() * 6;
-            sphere.position.z = -Math.cos(angle) * distance;
-
-            scene.add(sphere);
-            targets.push(sphere);
+            const dist = 15;
+            const angle = (Math.random() - 0.5) * Math.PI;
+            mesh.position.set(Math.sin(angle)*dist, Math.random()*8, -Math.cos(angle)*dist);
+            
+            scene.add(mesh);
+            targets.push(mesh);
         }
 
-        // 初始化生成 10 個標靶
-        for(let i=0; i<10; i++) spawnTarget();
+        for(let i=0; i<8; i++) spawnTarget();
 
-        // --- 7. 渲染迴圈 ---
+        // --- 渲染 ---
         function animate() {
             requestAnimationFrame(animate);
             renderer.render(scene, camera);
         }
+        animate();
 
-        // 視窗調整大小
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        animate();
     </script>
 </body>
 </html>
