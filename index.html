@@ -3,82 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Aim Pro - 自定義環境版</title>
+    <title>3D Aim Pro - 多人跨平台版</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
+        :root { --primary: #00ff88; --secondary: #00d4ff; --danger: #ff4444; }
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
             overflow: hidden; touch-action: none; background: #000;
-            font-family: sans-serif; color: white;
+            font-family: 'Segoe UI', Arial, sans-serif; color: white;
         }
         canvas { display: block; }
 
-        /* UI 層 */
-        #ui-layer {
-            position: absolute; top: 20px; left: 20px;
-            pointer-events: none; z-index: 5;
-        }
-        .stat { font-size: 1.5rem; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
-
-        /* 暫停選單 */
-        #menu {
+        /* 全螢幕遮罩 */
+        .overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); display: flex;
+            background: rgba(0,0,0,0.85); display: flex;
             flex-direction: column; justify-content: center; align-items: center;
-            z-index: 20; backdrop-filter: blur(8px);
+            z-index: 100; backdrop-filter: blur(10px);
         }
 
-        .control-panel {
-            background: rgba(255,255,255,0.1); padding: 25px;
-            border-radius: 15px; margin-bottom: 20px; min-width: 320px;
+        .menu-box {
+            background: rgba(255,255,255,0.05); padding: 30px;
+            border-radius: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.1);
+            width: 320px;
         }
 
-        .setting-item { margin: 12px 0; display: flex; justify-content: space-between; align-items: center; }
+        h1 { color: var(--primary); margin-bottom: 20px; font-size: 2rem; }
+        input {
+            padding: 12px; font-size: 1rem; border-radius: 8px; border: none;
+            margin: 10px 0; width: 90%; background: #222; color: white;
+        }
+
+        button { 
+            padding: 12px 25px; font-size: 1rem; background: var(--primary); color: #000;
+            border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
+            margin: 8px; width: 100%; transition: 0.2s;
+        }
+        button:hover { transform: translateY(-2px); opacity: 0.9; }
+        .btn-blue { background: var(--secondary); }
+        .btn-gray { background: #555; color: white; }
+
+        /* 遊戲介面 */
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 5;
+        }
+        .stat-card {
+            background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 10px;
+            margin-bottom: 8px; border-left: 4px solid var(--primary);
+        }
 
         #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            width: 16px; height: 16px; border: 2px solid #0f0; border-radius: 50%;
+            position: absolute; top: 50%; left: 50%; width: 14px; height: 14px;
+            border: 2px solid var(--primary); border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none; z-index: 10;
         }
 
-        select, input[type=range] { padding: 5px; width: 120px; border-radius: 5px; }
-        button { 
-            padding: 15px 60px; font-size: 1.2rem; background: #00ff88; color: #000;
-            border: none; border-radius: 10px; cursor: pointer; font-weight: bold;
+        /* 手機按鈕 */
+        #mobile-controls {
+            position: absolute; width: 100%; height: 100%; pointer-events: none;
+        }
+        #shoot-btn {
+            position: absolute; width: 85px; height: 85px; background: rgba(255,68,68,0.5);
+            border: 3px solid white; border-radius: 50%; pointer-events: auto;
+            display: flex; align-items: center; justify-content: center; font-size: 2rem;
+            box-shadow: 0 0 20px rgba(255,68,68,0.3);
         }
     </style>
 </head>
 <body>
 
-    <div id="ui-layer">
-        <div class="stat">分數: <span id="score">0</span></div>
-        <div class="stat">時間: <span id="timer">60</span>s</div>
+    <div id="view-login" class="overlay">
+        <div class="menu-box">
+            <h1>AIM PRO</h1>
+            <input type="text" id="username" placeholder="輸入玩家名稱">
+            <button onclick="saveUser('pc')">電腦版 (滑鼠)</button>
+            <button onclick="saveUser('mobile')" class="btn-blue">手機版 (觸控)</button>
+        </div>
     </div>
 
-    <div id="menu">
-        <h1 style="color:#00ff88">AIM TRAINER CUSTOM</h1>
-        <div class="control-panel">
-            <div class="setting-item">
-                <label>選擇場景背景</label>
-                <select id="bgSelect">
-                    <option value="0x050505">極致黑 (專業)</option>
-                    <option value="0x87ceeb">天空藍 (明亮)</option>
-                    <option value="0x2d5a27">森林綠 (舒適)</option>
-                    <option value="0x1a1a2e">星空藍 (科幻)</option>
-                </select>
-            </div>
-            <div class="setting-item">
-                <label>滑鼠靈敏度</label>
-                <input type="range" id="sensInput" min="1" max="30" value="8">
-            </div>
-            <div class="setting-item">
-                <label>目標大小</label>
-                <input type="range" id="sizeInput" min="2" max="15" value="6">
-            </div>
+    <div id="view-main" class="overlay" style="display:none">
+        <h2 id="greet">你好</h2>
+        <div class="menu-box">
+            <button onclick="showView('view-modes')">開始遊戲</button>
+            <button onclick="showView('view-settings')" class="btn-gray">設定</button>
         </div>
-        <button id="startBtn">確認並開始</button>
+    </div>
+
+    <div id="view-modes" class="overlay" style="display:none">
+        <h2>選擇模式</h2>
+        <button onclick="initGame('training')">單人訓練場</button>
+        <button onclick="showView('view-room')" class="btn-blue">多人對戰 (房號)</button>
+        <button onclick="showView('view-main')" class="btn-gray">返回</button>
+    </div>
+
+    <div id="view-room" class="overlay" style="display:none">
+        <div class="menu-box">
+            <h2>私人房間</h2>
+            <input type="text" id="roomID" placeholder="輸入房間名稱">
+            <input type="password" id="roomPW" placeholder="密碼 (選填)">
+            <button onclick="initGame('multi')">進入房間 / 創建</button>
+            <button onclick="showView('view-modes')" class="btn-gray">返回</button>
+        </div>
+    </div>
+
+    <div id="view-settings" class="overlay" style="display:none">
+        <div class="menu-box">
+            <h2>設定</h2>
+            <p>電腦射擊鍵: <input type="text" id="keySet" readonly onclick="captureKey()"></p>
+            <button onclick="showView('view-main')">儲存返回</button>
+        </div>
+    </div>
+
+    <div id="ui-layer" style="display:none">
+        <div class="stat-card">玩家: <span id="ui-name">---</span></div>
+        <div class="stat-card">分數: <span id="score">0</span></div>
+        <div class="stat-card" id="room-info" style="display:none">房間: <span id="ui-room">---</span></div>
     </div>
     
-    <div id="crosshair"></div>
+    <div id="crosshair" style="display:none"></div>
+    
+    <div id="mobile-controls" style="display:none">
+        <div id="shoot-btn" style="right:10%; bottom:15%;">🔥</div>
+    </div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -87,126 +133,156 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. 初始化 ---
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.rotation.order = 'YXZ';
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        // 燈光強化 (讓畫面不再昏暗)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // 提升整體亮度
-        scene.add(ambientLight);
-        const sunLight = new THREE.DirectionalLight(0xffffff, 1);
-        sunLight.position.set(5, 15, 10);
-        scene.add(sunLight);
-
-        // --- 2. 遊戲狀態 ---
+        // --- 初始化與變數 ---
+        let scene, camera, renderer, raycaster, socket;
         let isPaused = true;
         let score = 0;
-        let timeLeft = 60;
-        let sensitivity = 0.008;
-        let targetSize = 0.6;
-        const targets = [];
-        const raycaster = new THREE.Raycaster();
+        let targets = [];
+        let otherPlayers = {}; // 多人對戰玩家模型
 
-        // UI 綁定
-        const menu = document.getElementById('menu');
-        const bgSelect = document.getElementById('bgSelect');
-        const sensInput = document.getElementById('sensInput');
-        const sizeInput = document.getElementById('sizeInput');
+        // 讀取/初始化 LocalStorage
+        let config = JSON.parse(localStorage.getItem('aim_pro_cfg')) || {
+            name: "", device: "pc", shootKey: "KeyE", btnPos: {x: 80, y: 70}
+        };
 
-        // 設定初始背景
-        scene.background = new THREE.Color(0x050505);
+        // UI 切換
+        window.showView = (id) => {
+            document.querySelectorAll('.overlay').forEach(v => v.style.display = 'none');
+            if(id !== 'none') document.getElementById(id).style.display = 'flex';
+        };
 
-        // --- 3. 功能更新 ---
-        bgSelect.addEventListener('change', (e) => {
-            scene.background.setHex(parseInt(e.target.value));
-        });
+        window.saveUser = (dev) => {
+            const name = document.getElementById('username').value;
+            if(!name) return alert("請輸入名字");
+            config.name = name;
+            config.device = dev;
+            localStorage.setItem('aim_pro_cfg', JSON.stringify(config));
+            document.getElementById('greet').innerText = `你好, ${name}`;
+            showView('view-main');
+        };
 
-        sensInput.addEventListener('input', (e) => {
-            sensitivity = e.target.value * 0.001;
-        });
+        window.captureKey = () => {
+            const el = document.getElementById('keySet');
+            el.value = "請按鍵...";
+            window.addEventListener('keydown', (e) => {
+                config.shootKey = e.code;
+                el.value = e.code;
+                localStorage.setItem('aim_pro_cfg', JSON.stringify(config));
+            }, { once: true });
+        };
 
-        sizeInput.addEventListener('input', (e) => {
-            targetSize = e.target.value / 10;
-        });
+        // --- 核心遊戲邏輯 ---
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.rotation.order = 'YXZ';
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-        document.getElementById('startBtn').addEventListener('click', () => {
+            const light = new THREE.AmbientLight(0xffffff, 1);
+            scene.add(light);
+            raycaster = new THREE.Raycaster();
+            
+            animate();
+        }
+
+        window.initGame = (type) => {
+            showView('none');
             isPaused = false;
-            menu.style.display = 'none';
-            score = 0; timeLeft = 60;
-            document.getElementById('score').innerText = score;
-            targets.forEach(t => scene.remove(t));
-            targets.length = 0;
-            for(let i=0; i<6; i++) spawnTarget();
-        });
+            document.getElementById('ui-layer').style.display = 'block';
+            document.getElementById('crosshair').style.display = 'block';
+            document.getElementById('ui-name').innerText = config.name;
 
-        // --- 4. 操作 ---
-        window.addEventListener('mousemove', (e) => {
-            if (isPaused) return;
-            camera.rotation.y -= (e.movementX || 0) * sensitivity;
-            camera.rotation.x -= (e.movementY || 0) * sensitivity;
-            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-        });
+            if(config.device === 'pc') renderer.domElement.requestPointerLock();
+            else document.getElementById('mobile-controls').style.display = 'block';
+
+            if(type === 'multi') {
+                const rid = document.getElementById('roomID').value || "Lobby";
+                document.getElementById('room-info').style.display = 'block';
+                document.getElementById('ui-room').innerText = rid;
+                connectMultiplayer(rid);
+            } else {
+                startTraining();
+            }
+        };
+
+        function startTraining() {
+            score = 0;
+            document.getElementById('score').innerText = score;
+            for(let i=0; i<5; i++) spawnTarget();
+        }
+
+        function spawnTarget() {
+            const geo = new THREE.SphereGeometry(0.5, 24, 24);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x004422 });
+            const mesh = new THREE.Mesh(geo, mat);
+            const dist = 10 + Math.random() * 10;
+            const ay = (Math.random()-0.5) * Math.PI;
+            mesh.position.set(Math.sin(ay)*dist, (Math.random()*4), -Math.cos(ay)*dist);
+            scene.add(mesh);
+            targets.push(mesh);
+        }
 
         const shoot = () => {
-            if (isPaused) return;
+            if(isPaused) return;
             raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
             const hits = raycaster.intersectObjects(targets);
-            if (hits.length > 0) {
+            if(hits.length > 0) {
                 scene.remove(hits[0].object);
                 targets.splice(targets.indexOf(hits[0].object), 1);
                 score += 10;
                 document.getElementById('score').innerText = score;
                 spawnTarget();
+                if(socket) socket.emit('hit', { score: score });
             }
         };
 
-        window.addEventListener('mousedown', (e) => { if(e.button === 0) shoot(); });
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'KeyE') shoot();
-            if (e.key === 'Escape') { isPaused = true; menu.style.display = 'flex'; }
-        });
-
-        // --- 5. 目標生成 ---
-        function spawnTarget() {
-            const geometry = new THREE.SphereGeometry(targetSize, 32, 32);
-            // 讓標靶顏色更鮮豔
-            const material = new THREE.MeshStandardMaterial({ 
-                color: 0xff0055, 
-                emissive: 0x550000,
-                roughness: 0.1
-            });
-            const mesh = new THREE.Mesh(geometry, material);
-            const dist = 12 + Math.random() * 8;
-            const ay = (Math.random() - 0.5) * Math.PI * 1.5;
-            const ax = (Math.random() - 0.5) * Math.PI * 0.4;
-            mesh.position.set(Math.sin(ay)*dist, Math.sin(ax)*dist + 2, -Math.cos(ay)*dist);
-            scene.add(mesh);
-            targets.push(mesh);
+        // 多人連線 (預留)
+        function connectMultiplayer(room) {
+            // 注意: 這裡需要填入你的 Render/Railway 網址
+            // socket = io("https://your-server.com"); 
+            console.log(`正在連線到房間: ${room}`);
         }
 
-        function animate(time) {
-            requestAnimationFrame(animate);
-            if (!isPaused) {
-                // 每秒倒數
-                const sec = 60 - Math.floor(time / 1000) % 60;
-                if (timeLeft !== sec) {
-                    timeLeft = sec;
-                    document.getElementById('timer').innerText = timeLeft;
-                }
+        // --- 操作監聽 ---
+        window.addEventListener('mousemove', (e) => {
+            if(isPaused || config.device !== 'pc') return;
+            camera.rotation.y -= e.movementX * 0.002;
+            camera.rotation.x -= e.movementY * 0.002;
+            camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+        });
+
+        let touchX, touchY;
+        window.addEventListener('touchmove', (e) => {
+            if(isPaused || config.device !== 'mobile') return;
+            const t = e.touches[0];
+            if(touchX) {
+                camera.rotation.y -= (t.pageX - touchX) * 0.006;
+                camera.rotation.x -= (t.pageY - touchY) * 0.006;
             }
+            touchX = t.pageX; touchY = t.pageY;
+        });
+        window.addEventListener('touchend', () => { touchX = null; });
+
+        window.addEventListener('mousedown', (e) => { if(e.button === 0) shoot(); });
+        window.addEventListener('keydown', (e) => { if(e.code === config.shootKey) shoot(); });
+        document.getElementById('shoot-btn').addEventListener('touchstart', (e) => { 
+            e.preventDefault(); shoot(); 
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
             renderer.render(scene, camera);
         }
-        animate(0);
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        initThree();
+        // 初始載入
+        if(config.name) document.getElementById('username').value = config.name;
+        document.getElementById('keySet').value = config.shootKey;
+
     </script>
 </body>
 </html>
